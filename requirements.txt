@@ -10,4 +10,4 @@ python-docx
 pandas
 openpyxl
 chromadb
-protobuf<5.0.0dev
+protobuf==4.25.3
