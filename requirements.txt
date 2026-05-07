@@ -9,5 +9,4 @@ pypdf
 python-docx
 pandas
 openpyxl
-chromadb
-protobuf==4.25.3
+faiss-cpu
