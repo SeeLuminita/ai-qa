@@ -52,6 +52,62 @@ streamlit run knowledge.py
 
 ## Streamlit Cloud 部署
 
+### 部署步骤
+
+1. **Fork 或上传代码到 GitHub**
+
+2. **在 Streamlit Cloud 创建应用**
+   - 访问：https://share.streamlit.io/
+   - 选择 GitHub 仓库
+   - 主文件路径：`knowledge.py`
+
+3. **配置环境变量（重要！）**
+   
+   在 Streamlit Cloud 的 `Settings` → `Secrets` 中添加：
+   
+   ```toml
+   DASHSCOPE_API_KEY = "your_dashscope_api_key"
+   QDRANT_URL = "https://your-cluster.aws.qdrant.io:6333"
+   QDRANT_API_KEY = "your_qdrant_api_key"
+   ```
+
+4. **部署后查看日志**
+   - 点击右下角 "Manage app"
+   - 查看 "Logs" 标签
+   - 如有错误，日志会显示详细信息
+
+### 调试步骤
+
+如果部署失败，按以下步骤调试：
+
+1. **部署调试页面**
+   - 将主文件临时改为 `debug.py`
+   - 访问应用查看诊断信息
+   - 确认所有依赖和环境变量正确
+
+2. **常见问题**
+   
+   **问题1：导入错误**
+   ```
+   解决：确保 requirements.txt 包含所有依赖
+   ```
+   
+   **问题2：Qdrant 连接失败**
+   ```
+   解决：
+   - 检查 QDRANT_URL 是否正确
+   - 确认 QDRANT_API_KEY 已配置
+   - 测试 Qdrant Cloud 是否正常运行
+   ```
+   
+   **问题3：百炼 API 错误**
+   ```
+   解决：
+   - 检查 DASHSCOPE_API_KEY 是否正确
+   - 确认 API Key 未过期
+   - 查看配额是否用完
+   ```
+
 ### 方案 1: 使用 Qdrant Cloud（推荐）
 
 1. **注册 Qdrant Cloud**

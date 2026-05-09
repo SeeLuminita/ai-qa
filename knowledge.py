@@ -8,19 +8,26 @@ Day 6: 企业知识库问答系统
 import os
 import streamlit as st
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
-from langchain_qdrant import QdrantVectorStore
-from qdrant_client import QdrantClient
-from qdrant_client.http.models import Distance, VectorParams
-from langchain_core.documents import Document
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough
-from langchain_core.embeddings import Embeddings
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from typing import List
-import dashscope
-from dashscope import TextEmbedding
+
+# 错误处理 - 帮助调试
+try:
+    from langchain_openai import ChatOpenAI
+    from langchain_qdrant import QdrantVectorStore
+    from qdrant_client import QdrantClient
+    from qdrant_client.http.models import Distance, VectorParams
+    from langchain_core.documents import Document
+    from langchain_core.prompts import ChatPromptTemplate
+    from langchain_core.output_parsers import StrOutputParser
+    from langchain_core.runnables import RunnablePassthrough
+    from langchain_core.embeddings import Embeddings
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+    from typing import List
+    import dashscope
+    from dashscope import TextEmbedding
+except ImportError as e:
+    st.error(f"导入错误: {e}")
+    st.error("请检查 requirements.txt 是否正确安装")
+    st.stop()
 
 load_dotenv()
 
