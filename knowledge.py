@@ -207,7 +207,7 @@ with st.sidebar:
                         try:
                             client.delete_collection(collection_name="knowledge")
                         except:
-                            pass
+                            pass 
                         
                         # 创建新的collection并添加文档
                         if qdrant_api_key:
