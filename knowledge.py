@@ -22,7 +22,7 @@ try:
     from langchain_core.embeddings import Embeddings
     from langchain_text_splitters import RecursiveCharacterTextSplitter
     from typing import List
-    import dashscope
+    import dashscope 
     from dashscope import TextEmbedding
 except ImportError as e:
     st.error(f"导入错误: {e}")
