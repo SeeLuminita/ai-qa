@@ -9,7 +9,9 @@ import os
 import streamlit as st
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
-from langchain_community.vectorstores import Chroma
+from langchain_qdrant import QdrantVectorStore
+from qdrant_client import QdrantClient
+from qdrant_client.http.models import Distance, VectorParams
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -23,6 +25,19 @@ from dashscope import TextEmbedding
 load_dotenv()
 
 # ============================================
+# Qdrant 配置
+# ============================================
+def get_qdrant_client():
+    """获取Qdrant客户端（支持本地和云端）"""
+    qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
+    qdrant_api_key = os.getenv("QDRANT_API_KEY", None)
+    
+    if qdrant_api_key:
+        return QdrantClient(url=qdrant_url, api_key=qdrant_api_key)
+    else:
+        return QdrantClient(url=qdrant_url)
+
+# ============================================
 # 百炼 Embedding
 # ============================================
 class BailianEmbeddings(Embeddings):
@@ -33,11 +48,23 @@ class BailianEmbeddings(Embeddings):
         dashscope.api_key = os.getenv("DASHSCOPE_API_KEY")
     
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        result = TextEmbedding.call(model=self.model, input=texts)
-        return [item['embedding'] for item in result.output['embeddings']]
+        """批量embedding，每次最多10个文本"""
+        all_embeddings = []
+        batch_size = 10
+        
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            result = TextEmbedding.call(model=self.model, input=batch)
+            if result.output is None:
+                raise ValueError(f"Embedding API返回None: {result}")
+            all_embeddings.extend([item['embedding'] for item in result.output['embeddings']])
+        
+        return all_embeddings
     
     def embed_query(self, text: str) -> List[float]:
         result = TextEmbedding.call(model=self.model, input=[text])
+        if result.output is None:
+            raise ValueError(f"Embedding API返回None: {result}")
         return result.output['embeddings'][0]['embedding']
 
 # ============================================
@@ -128,12 +155,12 @@ with st.sidebar:
     
     # 清空知识库
     if clear_btn:
-        import shutil
-        if os.path.exists("./knowledge_base"):
-            shutil.rmtree("./knowledge_base")
+        try:
+            client = get_qdrant_client()
+            client.delete_collection(collection_name="knowledge")
             st.success("✅ 知识库已清空")
-        else:
-            st.info("知识库本来就是空的")
+        except Exception as e:
+            st.success(f"✅ 知识库已清空（{e}）")
     
     # 构建知识库
     if build_btn:
@@ -157,45 +184,74 @@ with st.sidebar:
                     # 文档分割
                     text_splitter = RecursiveCharacterTextSplitter(
                         chunk_size=500,
-                        chunk_overlap=50
+                        chunk_overlap=100,
+                        separators=["\n\n", "\n", "。", "！", "？", "；", " ", ""]
                     )
                     splits = text_splitter.split_documents(documents)
                     
                     # 创建或更新向量数据库
                     embeddings = BailianEmbeddings()
+                    client = get_qdrant_client()
+                    qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
+                    qdrant_api_key = os.getenv("QDRANT_API_KEY", None)
                     
                     if build_mode == "清空重建":
-                        # 删除旧知识库
-                        import shutil
-                        if os.path.exists("./knowledge_base"):
-                            shutil.rmtree("./knowledge_base")
+                        # 删除旧的collection
+                        try:
+                            client.delete_collection(collection_name="knowledge")
+                        except:
+                            pass
                         
-                        # 创建新的
-                        vectorstore = Chroma.from_documents(
-                            documents=splits,
-                            embedding=embeddings,
-                            persist_directory="./knowledge_base"
-                        )
+                        # 创建新的collection并添加文档
+                        if qdrant_api_key:
+                            vectorstore = QdrantVectorStore.from_documents(
+                                documents=splits,
+                                embedding=embeddings,
+                                url=qdrant_url,
+                                api_key=qdrant_api_key,
+                                collection_name="knowledge"
+                            )
+                        else:
+                            vectorstore = QdrantVectorStore.from_documents(
+                                documents=splits,
+                                embedding=embeddings,
+                                url=qdrant_url,
+                                collection_name="knowledge"
+                            )
                         st.success(f"✅ 已导入 {len(documents)} 个文档，分割为 {len(splits)} 个片段（已清空旧数据）")
                     else:
                         # 增量添加
-                        if os.path.exists("./knowledge_base"):
+                        # 检查collection是否存在
+                        collections = client.get_collections().collections
+                        collection_names = [c.name for c in collections]
+                        
+                        if "knowledge" in collection_names:
                             # 加载已有的
-                            vectorstore = Chroma(
-                                persist_directory="./knowledge_base",
-                                embedding_function=embeddings
+                            vectorstore = QdrantVectorStore(
+                                client=client,
+                                collection_name="knowledge",
+                                embedding=embeddings
                             )
                             # 添加新文档
                             vectorstore.add_documents(splits)
                             st.success(f"✅ 已追加 {len(documents)} 个文档，新增 {len(splits)} 个片段")
                         else:
                             # 第一次创建
-                            vectorstore = Chroma.from_documents(
-                                documents=splits,
-                                embedding=embeddings,
-                                persist_directory="./knowledge_base"
-                            )
-                            st.success(f"✅ 已导入 {len(documents)} 个文档，分割为 {len(splits)} 个片段")
+                            if qdrant_api_key:
+                                vectorstore = QdrantVectorStore.from_documents(
+                                    documents=splits,
+                                    embedding=embeddings,
+                                    url=qdrant_url,
+                                    api_key=qdrant_api_key,
+                                    collection_name="knowledge"
+                                )
+                            else:
+                                vectorstore = QdrantVectorStore.from_documents(
+                                    documents=splits,
+                                    embedding=embeddings,
+                                    url=qdrant_url,
+                                    collection_name="knowledge"
+                                )
                     
                     st.session_state.vectorstore = vectorstore
                 else:
@@ -205,10 +261,16 @@ with st.sidebar:
     
     # 显示知识库状态
     st.divider()
-    if os.path.exists("./knowledge_base"):
-        st.info("📊 知识库状态：已构建")
-    else:
-        st.info("📊 知识库状态：未构建")
+    try:
+        client = get_qdrant_client()
+        collections = client.get_collections().collections
+        collection_names = [c.name for c in collections]
+        if "knowledge" in collection_names:
+            st.info("📊 知识库状态：已构建")
+        else:
+            st.info("📊 知识库状态：未构建")
+    except:
+        st.info("📊 知识库状态：未连接")
     
     # ============================================
     # 检索参数设置
@@ -288,8 +350,14 @@ for message in st.session_state.messages:
 # 用户输入
 if prompt := st.chat_input("输入你的问题..."):
     # 检查知识库
-    if not os.path.exists("./knowledge_base"):
-        st.error("请先上传文档构建知识库")
+    try:
+        client = get_qdrant_client()
+        collections = client.get_collections().collections
+        collection_names = [c.name for c in collections]
+        if "knowledge" not in collection_names:
+            st.error("请先上传文档构建知识库")
+    except Exception as e:
+        st.error(f"连接Qdrant失败: {e}")
     else:
         # 显示用户消息
         with st.chat_message("user"):
@@ -301,9 +369,12 @@ if prompt := st.chat_input("输入你的问题..."):
             with st.spinner("思考中..."):
                 # 加载向量数据库
                 embeddings = BailianEmbeddings()
-                vectorstore = Chroma(
-                    persist_directory="./knowledge_base",
-                    embedding_function=embeddings
+                client = get_qdrant_client()
+                
+                vectorstore = QdrantVectorStore(
+                    client=client,
+                    collection_name="knowledge",
+                    embedding=embeddings
                 )
                 
                 # 创建 RAG 链

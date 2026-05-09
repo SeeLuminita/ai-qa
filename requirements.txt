@@ -4,10 +4,10 @@ langchain-openai
 langchain-community
 langchain-core
 langchain-text-splitters
+langchain-qdrant
 dashscope
 pypdf
 python-docx
 pandas
 openpyxl
-chromadb
-protobuf<5.0.0dev
+qdrant-client
