@@ -8,26 +8,19 @@ Day 6: 企业知识库问答系统
 import os
 import streamlit as st
 from dotenv import load_dotenv
-
-# 错误处理 - 帮助调试
-try:
-    from langchain_openai import ChatOpenAI
-    from langchain_qdrant import QdrantVectorStore
-    from qdrant_client import QdrantClient
-    from qdrant_client.http.models import Distance, VectorParams
-    from langchain_core.documents import Document
-    from langchain_core.prompts import ChatPromptTemplate
-    from langchain_core.output_parsers import StrOutputParser
-    from langchain_core.runnables import RunnablePassthrough
-    from langchain_core.embeddings import Embeddings
-    from langchain_text_splitters import RecursiveCharacterTextSplitter
-    from typing import List
-    import dashscope 
-    from dashscope import TextEmbedding
-except ImportError as e:
-    st.error(f"导入错误: {e}")
-    st.error("请检查 requirements.txt 是否正确安装")
-    st.stop()
+from langchain_openai import ChatOpenAI
+from langchain_qdrant import QdrantVectorStore
+from qdrant_client import QdrantClient
+from qdrant_client.http.models import Distance, VectorParams
+from langchain_core.documents import Document
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.embeddings import Embeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from typing import List
+import dashscope 
+from dashscope import TextEmbedding 
 
 load_dotenv()
 
@@ -404,12 +397,25 @@ if prompt := st.chat_input("输入你的问题..."):
                 else:
                     retriever = vectorstore.as_retriever(search_kwargs={"k": top_k})
                 
+                # 构建对话历史
+                def get_chat_history():
+                    """获取对话历史"""
+                    history = []
+                    for msg in st.session_state.messages:
+                        if msg["role"] == "user":
+                            history.append(("user", msg["content"]))
+                        else:
+                            history.append(("assistant", msg["content"]))
+                    return history
+                
+                # 创建带上下文的 prompt
                 rag_prompt = ChatPromptTemplate.from_messages([
                     ("system", """你是企业知识库助手，根据以下文档内容回答用户问题。
-如果文档中没有相关信息，你可以按照自己的知识回答，此时需要标注结果仅供参考"。
+如果文档中没有相关信息，你可以按照自己的知识回答，此时需要标注结果仅供参考。
 
 文档内容：
 {context}"""),
+                    MessagesPlaceholder(variable_name="chat_history"),
                     ("user", "{question}")
                 ])
                 
@@ -425,12 +431,14 @@ if prompt := st.chat_input("输入你的问题..."):
                 docs_with_scores = vectorstore.similarity_search_with_score(prompt, k=top_k)
                 
                 # 根据阈值过滤
-                # Chroma 返回的是距离（distance），距离越小越相似
                 if search_mode == "阈值过滤" and score_threshold is not None:
-                    # 阈值是距离阈值，距离越小越相似，所以用 <=
                     docs = [doc for doc, score in docs_with_scores if score <= score_threshold]
                 else:
                     docs = [doc for doc, score in docs_with_scores]
+                
+                # 获取对话历史
+                chat_history = get_chat_history()
+                print(f"his对话:{chat_history}")
                 if docs:
                     # 显示参考文档
                     with st.expander("📄 参考文档"):
@@ -443,12 +451,16 @@ if prompt := st.chat_input("输入你的问题..."):
                     # 生成答案
                     response = chain.invoke({
                         "context": format_docs(docs),
-                        "question": prompt
+                        "question": prompt,
+                        "chat_history":chat_history
                     })
                     st.markdown(response)
+                    # 保存回答到消息历史
+                    st.session_state.messages.append({"role": "assistant", "content": response})
                 else:
                     if answer_mode=="知识库优先":
                        st.markdown("知识库中没有相关信息")
+                       st.session_state.messages.append({"role": "assistant", "content": "知识库中没有相关信息"})
                     else:
                          # 知识库没有找到，让 LLM 用自己的知识回答
                         st.warning("知识库中没有找到相关信息，以下回答来自 LLM 通用知识：")
