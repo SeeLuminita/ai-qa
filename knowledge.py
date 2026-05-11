@@ -438,7 +438,6 @@ if prompt := st.chat_input("输入你的问题..."):
                 
                 # 获取对话历史
                 chat_history = get_chat_history()
-                print(f"his对话:{chat_history}")
                 if docs:
                     # 显示参考文档
                     with st.expander("📄 参考文档"):
