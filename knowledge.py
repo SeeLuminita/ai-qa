@@ -160,7 +160,7 @@ with st.sidebar:
             client.delete_collection(collection_name="knowledge")
             st.success("✅ 知识库已清空")
         except Exception as e:
-            st.success(f"✅ 知识库已清空（{e}）")
+            st.success(f"✅ 知识库已清空（{e}）") 
     
     # 构建知识库
     if build_btn:
